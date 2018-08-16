@@ -1,10 +1,13 @@
 /home/duclv/workspace/PlanningServer/src/com/bdi/planning/State.java
 /home/duclv/workspace/PlanningServer/src/com/bdi/planning/ExecutionLog.java
-/home/duclv/workspace/PlanningServer/src/com/bdi/planning/Plan.java
 /home/duclv/workspace/PlanningServer/src/com/bdi/planning/User.java
 /home/duclv/workspace/PlanningServer/src/com/bdi/planning/Application.java
+/home/duclv/workspace/PlanningServer/src/com/bdi/planning/DataSource.java
+/home/duclv/workspace/PlanningServer/src/com/bdi/planning/PlanDetail.java
+/home/duclv/workspace/PlanningServer/src/com/bdi/planning/PlanItem.java
+/home/duclv/workspace/PlanningServer/src/com/bdi/planning/Plan.java
+/home/duclv/workspace/PlanningServer/src/com/bdi/planning/Constraint.java
 /home/duclv/workspace/PlanningServer/src/com/bdi/planning/Project.java
 /home/duclv/workspace/PlanningServer/src/com/bdi/planning/PlanningService.java
 /home/duclv/workspace/PlanningServer/src/com/bdi/planning/Goal.java
-/home/duclv/workspace/PlanningServer/src/com/bdi/planning/DataSource.java
-/home/duclv/workspace/PlanningServer/src/com/bdi/planning/PlanDetail.java
+/home/duclv/workspace/PlanningServer/src/com/bdi/planning/PlanRevision.java

@@ -11,6 +11,7 @@ public class State implements Serializable{
 	private int Id;
 	private String Name;
 	private String Content;
+	private String Result;
 	private int Is_initial;
 	private int Is_goal;
 	private int totalResult;
@@ -53,6 +54,12 @@ public class State implements Serializable{
 	}
 	public void setId(int id) {
 		Id = id;
+	}
+	public String getResult() {
+		return Result;
+	}
+	public void setResult(String result) {
+		Result = result;
 	}
 
 }

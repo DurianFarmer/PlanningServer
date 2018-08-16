@@ -15,6 +15,7 @@ public class ExecutionLog implements Serializable {
 	private int user_executed;
 	private Timestamp date_start;
 	private Timestamp date_end;
+	private Timestamp date_log;
 	private int totalResult;
 	private String item_name;
 	private String item_unit;
@@ -85,6 +86,12 @@ public class ExecutionLog implements Serializable {
 	}
 	public void setUser_executed_name(String user_executed_name) {
 		this.user_executed_name = user_executed_name;
+	}
+	public Timestamp getDate_log() {
+		return date_log;
+	}
+	public void setDate_log(Timestamp date_log) {
+		this.date_log = date_log;
 	}
 
 }

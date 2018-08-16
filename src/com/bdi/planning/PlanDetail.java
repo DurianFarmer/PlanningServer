@@ -15,6 +15,7 @@ public class PlanDetail implements Serializable {
 	private int user_assigned;
 	private Timestamp date_start;
 	private Timestamp date_end;
+	private int cur_version;
 	private int totalResult;
 	private String item_name;
 	private String item_unit;
@@ -85,6 +86,12 @@ public class PlanDetail implements Serializable {
 	}
 	public void setItem_unit(String item_unit) {
 		this.item_unit = item_unit;
+	}
+	public int getCur_version() {
+		return cur_version;
+	}
+	public void setCur_version(int cur_version) {
+		this.cur_version = cur_version;
 	}
 
 }
