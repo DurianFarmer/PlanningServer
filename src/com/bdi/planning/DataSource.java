@@ -13,8 +13,8 @@ public class DataSource {
 
 	private DataSource() throws IOException, SQLException, PropertyVetoException {
 		cpds = new ComboPooledDataSource();
-		cpds.setDriverClass("com.mysql.jdbc.Driver"); // loads the jdbc driver
-		cpds.setJdbcUrl("jdbc:mysql://147.47.206.14:53306/planning?characterEncoding=utf8");
+		cpds.setDriverClass("com.mysql.cj.jdbc.Driver"); // loads the jdbc driver
+		cpds.setJdbcUrl("jdbc:mysql://147.47.206.14:3306/planning?characterEncoding=utf8&serverTimezone=UTC");
 		cpds.setUser("root");
 		cpds.setPassword("root");
 

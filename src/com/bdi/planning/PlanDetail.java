@@ -20,6 +20,7 @@ public class PlanDetail implements Serializable {
 	private String item_name;
 	private String item_unit;
 	private String user_assigned_name;
+	private long actual_value;
 	
 	public int getId() {
 		return id;
@@ -92,6 +93,12 @@ public class PlanDetail implements Serializable {
 	}
 	public void setCur_version(int cur_version) {
 		this.cur_version = cur_version;
+	}
+	public long getActual_value() {
+		return actual_value;
+	}
+	public void setActual_value(long actual_value) {
+		this.actual_value = actual_value;
 	}
 
 }

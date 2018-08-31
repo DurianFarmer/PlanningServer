@@ -18,6 +18,8 @@ public class Plan implements Serializable {
 	private int totalResult;
 	private String project_name;
 	private String user_create_name;
+	private long initial_budget;
+	private long executed_budget;
 	
 	public int getId() {
 		return id;
@@ -78,6 +80,18 @@ public class Plan implements Serializable {
 	}
 	public void setUser_create_name(String user_create_name) {
 		this.user_create_name = user_create_name;
+	}
+	public long getInitial_budget() {
+		return initial_budget;
+	}
+	public void setInitial_budget(long initial_budget) {
+		this.initial_budget = initial_budget;
+	}
+	public long getExecuted_budget() {
+		return executed_budget;
+	}
+	public void setExecuted_budget(long executed_budget) {
+		this.executed_budget = executed_budget;
 	}
 
 }

@@ -79,9 +79,52 @@ public class PlanningService {
 		}
 		return mapUser;
 	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/searchUser")
+	public List<User> searchUser() {
+		// result to return
+		List<User> result = new ArrayList<>();
+
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				System.out.println("Connect to DB successfully!");
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"SELECT Id, Name FROM User WHERE 1=1 ");
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+
+				// get result
+				ResultSet rs = stmt.executeQuery();
+				while (rs.next()) {
+					int id = rs.getInt(1);
+					String name = rs.getString(2);
+					// add to result
+					User u = new User();
+					u.setId(id);
+					u.setName(name);
+					result.add(u);
+				}
+				rs.close();
+				stmt.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return result;
+	}
 
 	@RequestMapping(method = RequestMethod.GET, value = "/searchGoal")
-	public List<Goal> searchGoal(@RequestParam(required = false, name = "pageIndex") Integer pageIndex,
+	public List<Goal> searchGoal(@RequestParam(required = false, name = "searchParent") Boolean searchParent,
+			@RequestParam(required = false, name = "pageIndex") Integer pageIndex,
 			@RequestParam(required = false, name = "pageSize") Integer pageSize) {
 		// result to return
 		List<Goal> result = new ArrayList<>();
@@ -100,6 +143,9 @@ public class PlanningService {
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
 						"SELECT Id, Parent_id, Target, Description, Date_created, User_created FROM Goal WHERE 1=1 ");
+				if (searchParent != null && searchParent) {
+					query.append("AND Parent_id IS NULL ");
+				}
 				query.append("ORDER BY Id ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 
@@ -240,7 +286,8 @@ public class PlanningService {
 	
 	@RequestMapping(method = RequestMethod.GET, value = "/searchPlan")
 	public List<Plan> searchPlan(@RequestParam(required = false, name = "projectId") Integer projectId,
-			@RequestParam(required = false, name = "planId") Integer planId) {
+			@RequestParam(required = false, name = "planId") Integer planId,
+			@RequestParam(required = false, name = "searchBudget") Boolean searchBudget) {
 		// result to return
 		List<Plan> result = new ArrayList<>();
 		
@@ -250,7 +297,7 @@ public class PlanningService {
 			try {
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT Id, Parent_id, Name, Version_id, Date_created, User_create FROM Plan WHERE 1=1 ");
+						"SELECT Id, Parent_id, Name, Cur_version, Date_created, User_created FROM Plan WHERE 1=1 ");
 				if (projectId != null && projectId > 0) {
 					query.append("AND Project_id = ? ");
 				}
@@ -288,6 +335,100 @@ public class PlanningService {
 				}
 				rs.close();
 				stmt.close();
+				
+				// search plan budget and execution budget
+				if (searchBudget != null && searchBudget) {
+					for (Plan p : result) {
+						List<Plan> budget = searchPlanBudget(p.getId());
+						if (!budget.isEmpty()) {
+							p.setInitial_budget(budget.get(0).getInitial_budget());
+							p.setExecuted_budget(budget.get(0).getExecuted_budget());
+						}
+					}
+				}
+				
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return result;
+	}
+	
+	private long parseLong(String item) {
+		item = item.trim().replace(",", "");
+		return Long.parseLong(item);
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/searchPlanBudget")
+	public List<Plan> searchPlanBudget(@RequestParam(required = true, name = "planId") Integer planId) {
+		// result to return
+		List<Plan> result = new ArrayList<>();
+		Plan p = new Plan();
+		
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// get all item value of this plan or this plan's all children
+				StringBuilder query = new StringBuilder(
+						"SELECT a.Item_value "
+						+ "FROM Plan_Detail a JOIN Plan b ON a.Plan_id = b.Id AND a.Cur_version = b.Cur_version WHERE 1=1 ");
+				if (planId != null && planId > 0) {
+					query.append("AND b.Id = ? OR b.Parent_id = ? ");
+				}
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (planId != null && planId > 0) {
+					stmt.setInt(1, planId);
+					stmt.setInt(2, planId);
+				}
+
+				// get result
+				ResultSet rs = stmt.executeQuery();
+				long initialBudget = 0;
+				while (rs.next()) {
+					String itemValue = rs.getString(1);
+					long value = parseLong(itemValue);
+					initialBudget += value;
+				}
+				rs.close();
+				stmt.close();
+				
+				// get all execution value of this plan or this plan's all children
+				query = new StringBuilder(
+						"SELECT a.Item_value "
+						+ "FROM Execution_Log a JOIN Plan b ON a.Plan_id = b.Id WHERE 1=1 ");
+				if (planId != null && planId > 0) {
+					query.append("AND b.Id = ? OR b.Parent_id = ? ");
+				}
+				stmt = dBConn.prepareStatement(query.toString());
+				if (planId != null && planId > 0) {
+					stmt.setInt(1, planId);
+					stmt.setInt(2, planId);
+				}
+
+				// get result
+				rs = stmt.executeQuery();
+				long executedBudget = 0;
+				while (rs.next()) {
+					String itemValue = rs.getString(1);
+					long value = parseLong(itemValue);
+					executedBudget += value;
+				}
+				rs.close();
+				stmt.close();
+				
+				// add to result
+				p.setInitial_budget(initialBudget);
+				p.setExecuted_budget(executedBudget);
+				result.add(p);
+				
 			} catch (SQLException e) {
 				e.printStackTrace();
 				System.err.println("Query failed!");
@@ -305,6 +446,7 @@ public class PlanningService {
 	@RequestMapping(method = RequestMethod.GET, value = "/searchPlanDetail")
 	public List<PlanDetail> searchPlanDetail(@RequestParam(required = true, name = "planId") Integer planId,
 									@RequestParam(required = false, name = "curVersion") Integer curVersion,
+									@RequestParam(required = false, name = "searchActual") Boolean searchActual,
 									@RequestParam(required = false, name = "pageIndex") Integer pageIndex,
 									@RequestParam(required = false, name = "pageSize") Integer pageSize) {
 		// result to return
@@ -320,18 +462,18 @@ public class PlanningService {
 		Connection dBConn = getDBConnection();
 		if (dBConn != null) {
 			try {
-				// make query to get detail by time and section
+				// make query to get plan detail
 				StringBuilder query = new StringBuilder(
 						"SELECT a.Item_id, a.Item_value, b.Name, b.Unit, a.User_assigned, a.Date_start, a.Date_end, a.Cur_version " +
 						"FROM Plan_Detail a JOIN Plan_Item b ON a.Item_id = b.Id WHERE 1=1 ");
 				query.append("AND a.Plan_id = ? ");
-				if (curVersion != null && curVersion > 0) {
+				if (curVersion != null) {
 					query.append("AND a.Cur_version = ? ");
 				}
 				query.append("ORDER BY a.Date_start ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setInt(1, planId);
-				if (curVersion != null && curVersion > 0) {
+				if (curVersion != null) {
 					stmt.setInt(2, curVersion);
 				}
 
@@ -361,6 +503,33 @@ public class PlanningService {
 				}
 				rs.close();
 				stmt.close();
+				
+				// search actual value of plan item by hierarchical
+				if (searchActual != null && searchActual) {
+					for (PlanDetail p : result) {
+						query = new StringBuilder("SELECT a.Item_value FROM Execution_Log a JOIN Plan_Item b ON a.Item_id = b.Id WHERE 1=1 ");
+						query.append("AND a.Plan_id = ? ");
+						query.append("AND (b.Id = ? OR b.Parent_id = ?) ");
+						
+						stmt = dBConn.prepareStatement(query.toString());
+						stmt.setInt(1, planId);
+						int itemId = p.getItemId();
+						stmt.setInt(2, itemId);
+						stmt.setInt(3, itemId);
+						
+						long actualValue = 0;
+						rs = stmt.executeQuery();
+						while(rs.next()) {
+							String itemValue = rs.getString(1);
+							long value = parseLong(itemValue);
+							actualValue += value;
+						}
+						p.setActual_value(actualValue);
+						rs.close();
+						stmt.close();
+					}
+				}
+				
 				// return result by paging
 				int totalResult = result.size();
 				int fromIndex = (pageIndex - 1) * pageSize;
@@ -414,13 +583,13 @@ public class PlanningService {
 						"SELECT d.Item_id, d.Item_value, i.Name, i.Unit, d.User_assigned, d.Date_start, d.Date_end, r.Old_version " +
 						"FROM (Detail_Revision r JOIN Plan_Detail d ON r.Detail_id = d.Id) JOIN Plan_Item i ON d.Item_id = i.Id WHERE 1=1 ");
 				query.append("AND d.Plan_id = ? ");
-				if (curVersion != null && curVersion > 0) {
+				if (curVersion != null) {
 					query.append("AND r.Old_version = ? ");
 				}
 				query.append("ORDER BY d.Date_start ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setInt(1, planId);
-				if (curVersion != null && curVersion > 0) {
+				if (curVersion != null) {
 					stmt.setInt(2, curVersion);
 				}
 
@@ -736,7 +905,7 @@ public class PlanningService {
 					query.append("AND Parent_id = ? ");
 				}
 				if (isSearchParent != null && isSearchParent) {
-					query.append("AND Parent_id IS NULL ");
+					query.append("AND (Parent_id IS NULL OR Parent_id <= 4) ");
 				}
 				query.append("ORDER BY Parent_id, Id ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
@@ -805,8 +974,8 @@ public class PlanningService {
 			try {
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT Id, Date_created, Date_updated, User_created, User_updated, Comment FROM Plan_Revision WHERE 1=1 ");
-				query.append("AND Plan_id = ? ORDER BY Id DESC ");
+						"SELECT Version_id, Date_created, Date_updated, User_created, User_updated, Update_reason FROM Plan_Revision WHERE 1=1 ");
+				query.append("AND Plan_id = ? ORDER BY Version_id DESC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setInt(1, planId);
 
@@ -852,6 +1021,167 @@ public class PlanningService {
 		DateFormat formatter = new SimpleDateFormat(pattern);
 		Date d = formatter.parse(source);
 		return new Timestamp(d.getTime());
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/newGoal")
+	public int newGoal(
+			@RequestParam(required = false, name = "parentId") Integer parentId,
+			@RequestParam(required = true, name = "target") String target,
+			@RequestParam(required = false, name = "description") String description) {
+
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"INSERT INTO Goal(Parent_id, Target, Description, User_created, Date_created) ");
+				query.append("VALUES(?, ?, ?, ?, ?)");
+				
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (parentId != null && parentId > 0) {
+					stmt.setInt(1, parentId);
+				}
+				else {
+					stmt.setNull(1, java.sql.Types.INTEGER);
+				}
+				if (target != null && !target.isEmpty()) {
+					stmt.setString(2, target);
+				}
+				stmt.setString(3, description);
+				int userCreated = 1;
+				stmt.setInt(4, userCreated);
+				stmt.setTimestamp(5, new Timestamp(new Date().getTime()));
+
+				// execute insert/update
+				stmt.executeUpdate();
+				stmt.close();
+
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+				return 0;
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return 1;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/newProject")
+	public int newProject(@RequestParam(required = true, name = "goalId") Integer goalId,
+			@RequestParam(required = true, name = "code") String code,
+			@RequestParam(required = true, name = "name") String name,
+			@RequestParam(required = false, name = "description") String description,
+			@RequestParam(required = true, name = "date_start") String startDate,
+			@RequestParam(required = true, name = "date_end") String endDate,
+			@RequestParam(required = true, name = "managerId") Integer managerId) {
+
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"INSERT INTO Project(Code, Name, Description, Manager_id, Goal_id, Date_start, Date_end, Date_created) ");
+				query.append("VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
+				
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (code != null && !code.isEmpty()) {
+					stmt.setString(1, code);
+				}
+				if (name != null && !name.isEmpty()) {
+					stmt.setString(2, name);
+				}
+				stmt.setString(3, description);
+				if (managerId != null && managerId > 0) {
+					stmt.setInt(4, managerId);
+				}
+				if (goalId != null && goalId > 0) {
+					stmt.setInt(5, goalId);
+				}
+				String pattern = "yyyy/MM/dd";
+				if (startDate != null && !startDate.isEmpty()) {
+					stmt.setTimestamp(6, convertString2Ts(startDate, pattern));
+				}
+				if (endDate != null && !endDate.isEmpty()) {
+					stmt.setTimestamp(7, convertString2Ts(endDate, pattern));
+				}
+				stmt.setTimestamp(8, new Timestamp(new Date().getTime()));
+
+				// execute insert/update
+				stmt.executeUpdate();
+				stmt.close();
+
+			} catch (SQLException | ParseException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+				return 0;
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return 1;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/newPlan")
+	public int newPlan(@RequestParam(required = true, name = "projectId") Integer projectId,
+			@RequestParam(required = false, name = "parentId") Integer parentId,
+			@RequestParam(required = true, name = "name") String planName) {
+
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"INSERT INTO Plan(Parent_id, Project_id, Name, Cur_version, User_created, Date_created) ");
+				query.append("VALUES(?, ?, ?, ?, ?, ?)");
+				
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (parentId != null && parentId > 0) {
+					stmt.setInt(1, parentId);
+				}
+				else {
+					stmt.setNull(1, java.sql.Types.INTEGER);
+				}
+				if (projectId != null && projectId > 0) {
+					stmt.setInt(2, projectId);
+				}
+				if (planName != null && !planName.isEmpty()) {
+					stmt.setString(3, planName);
+				}
+				int curVersion = 0;
+				stmt.setInt(4, curVersion);
+				int userCreated = 1;
+				stmt.setInt(5, userCreated);
+				stmt.setTimestamp(6, new Timestamp(new Date().getTime()));
+
+				// execute insert/update
+				stmt.executeUpdate();
+				stmt.close();
+
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+				return 0;
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return 1;
 	}
 	
 	@RequestMapping(method = RequestMethod.GET, value = "/newPlanExecution")
@@ -925,7 +1255,7 @@ public class PlanningService {
 			try {
 				// check whether there existed a plan detail
 				boolean isDetailExisted = false;
-				long newVersionId = 0;
+				int newVersionId = 0;
 				
 				StringBuilder query = new StringBuilder("");
 				query.append("SELECT COUNT(1) FROM Plan_Detail WHERE Plan_id = ?");
@@ -943,61 +1273,61 @@ public class PlanningService {
 				stmt.close();
 				
 				if (isDetailExisted) {
-					// create a new version of this plan
-					query = new StringBuilder("");
-					query.append("INSERT INTO Plan_Revision(Plan_id, Date_created, Date_updated, User_created, User_updated) ");
-					query.append("VALUES(?, (SELECT Date_created FROM Plan WHERE Id = ?), ?, (SELECT User_create FROM Plan WHERE Id = ?), ?)");
-					
-					dbConn.setAutoCommit(false);
-					stmt = dbConn.prepareStatement(query.toString());
-					if (planId != null && planId > 0) {
-						stmt.setInt(1, planId);
-						stmt.setInt(2, planId);
-						stmt.setInt(4, planId);
-					}
-					stmt.setTimestamp(3, new Timestamp(new Date().getTime()));
-					stmt.setInt(5, 1);	// User_id = 1
-					stmt.executeUpdate();
-					dbConn.commit();
-					stmt.close();
-					dbConn.setAutoCommit(true);
-					
-					// 2) update Version_id for table Plan
-					query = new StringBuilder("SELECT MAX(Id) FROM Plan_Revision WHERE Plan_id = ?");
+					// get current version of this plan
+					int curVersionId = 0;
+					query = new StringBuilder("SELECT Cur_version FROM Plan WHERE Id = ?");
 					stmt = dbConn.prepareStatement(query.toString());
 					if (planId != null && planId > 0) {
 						stmt.setInt(1, planId);
 					}
 					rs = stmt.executeQuery();
 					if (rs.next()) {
-						newVersionId = rs.getLong(1);
+						curVersionId = (int) rs.getLong(1);
 					}
 					rs.close();
 					stmt.close();
 					
-					query = new StringBuilder("UPDATE Plan SET Version_id = ? WHERE Id = ?");
+					// create a revision for this plan based on current version
+					query = new StringBuilder("INSERT INTO Plan_Revision(Version_id, Plan_id, Date_created, Date_updated, User_created, User_updated, Update_reason) ");
+					query.append("VALUES(?, ?, (SELECT Date_created FROM Plan WHERE Id = ?), ?, (SELECT User_created FROM Plan WHERE Id = ?), ?, ?)");
+					
+					dbConn.setAutoCommit(false);
+					stmt = dbConn.prepareStatement(query.toString());
+					stmt.setInt(1, curVersionId);
+					if (planId != null && planId > 0) {
+						stmt.setInt(2, planId);
+						stmt.setInt(3, planId);
+						stmt.setInt(5, planId);
+					}
+					stmt.setTimestamp(4, new Timestamp(new Date().getTime()));
+					stmt.setInt(6, 1);	// User_id = 1
+					stmt.setString(7, "Add new Plan Detail");
+					stmt.executeUpdate();
+					dbConn.commit();
+					stmt.close();
+					dbConn.setAutoCommit(true);
+					
+					// 2) update Version for table Plan
+					newVersionId = curVersionId + 1;
+					query = new StringBuilder("UPDATE Plan SET Cur_version = ? WHERE Id = ?");
 					stmt = dbConn.prepareStatement(query.toString());
 					if (planId != null && planId > 0) {
 						stmt.setInt(2, planId);
 					}
-					if (newVersionId > 0) {
-						stmt.setInt(1, (int) newVersionId);
-					}
+					stmt.setInt(1, newVersionId);
 					stmt.executeUpdate();
 					stmt.close();
 				}
 				// if existed plan detail -> add Detail_Revision then update Cur_version in Plan_detail
 				if (isDetailExisted) {
 					query = new StringBuilder("INSERT INTO Detail_Revision(Plan_id, Detail_id, Old_version) ");
-					query.append("SELECT Plan_id, Id, Cur_version FROM Plan_Detail WHERE Plan_id = ? AND (Cur_version IS NULL OR Cur_version != ?)");
+					query.append("SELECT Plan_id, Id, Cur_version FROM Plan_Detail WHERE Plan_id = ? AND Cur_version != ?");
 					
 					stmt = dbConn.prepareStatement(query.toString());
 					if (planId != null && planId > 0) {
 						stmt.setInt(1, planId);
 					}
-					if (newVersionId > 0) {
-						stmt.setInt(2, (int) newVersionId);
-					}
+					stmt.setInt(2, newVersionId);
 					stmt.executeUpdate();
 					stmt.close();
 					
@@ -1006,9 +1336,7 @@ public class PlanningService {
 					if (planId != null && planId > 0) {
 						stmt.setInt(2, planId);
 					}
-					if (newVersionId > 0) {
-						stmt.setInt(1, (int) newVersionId);
-					}
+					stmt.setInt(1, newVersionId);
 					stmt.executeUpdate();
 					stmt.close();
 				}
@@ -1036,12 +1364,7 @@ public class PlanningService {
 					stmt.setTimestamp(5, convertString2Ts(endDate, pattern));
 				}
 				stmt.setInt(6, 1); // userId = 1
-				if (newVersionId > 0) {
-					stmt.setInt(7, (int) newVersionId);
-				}
-				else {
-					stmt.setNull(7, java.sql.Types.INTEGER);
-				}
+				stmt.setInt(7, newVersionId);
 
 				// execute insert/update
 				stmt.executeUpdate();
@@ -1091,6 +1414,46 @@ public class PlanningService {
 					stmt.setString(3, itemUnit);
 				}
 				stmt.setString(4, description);
+
+				// execute insert/update
+				stmt.executeUpdate();
+				stmt.close();
+
+			} catch (SQLException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+				return 0;
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return 1;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/newConstraint")
+	public int newConstraint(@RequestParam(required = true, name = "planId") Integer planId,
+			@RequestParam(required = true, name = "ruleName") String ruleName) {
+
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"INSERT INTO Constraint_Rule(Plan_id, Constraint_rule) ");
+				query.append("VALUES(?, ?)");
+				
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (planId != null && planId > 0) {
+					stmt.setInt(1, planId);
+				}
+				if (ruleName != null && !ruleName.isEmpty()) {
+					stmt.setString(2, ruleName);
+				}
 
 				// execute insert/update
 				stmt.executeUpdate();
