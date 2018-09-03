@@ -12,6 +12,7 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -750,7 +751,7 @@ public class PlanningService {
 			try {
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT Id, Name, Content, Result, Is_initial, Is_goal FROM State WHERE 1=1 ");
+						"SELECT Id, Name, Content, Result, Is_initial, Is_goal, Plan_state, Checkpoint_date FROM State WHERE 1=1 ");
 				if (projectId != null && projectId > 0) {
 					query.append("AND Project_id = ? ");
 				}
@@ -769,6 +770,8 @@ public class PlanningService {
 					String state_result = rs.getString(4);
 					int is_initial = rs.getInt(5);
 					int is_goal = rs.getInt(6);
+					String plan_state = rs.getString(7);
+					Timestamp checkpoint_date = rs.getTimestamp(8);
 					// add to result
 					State s = new State();
 					s.setId(id);
@@ -777,6 +780,8 @@ public class PlanningService {
 					s.setResult(state_result);
 					s.setIs_initial(is_initial);
 					s.setIs_goal(is_goal);
+					s.setPlan_state(plan_state);
+					s.setCheckpoint_date(checkpoint_date);
 					result.add(s);
 				}
 				rs.close();
@@ -1021,6 +1026,12 @@ public class PlanningService {
 		DateFormat formatter = new SimpleDateFormat(pattern);
 		Date d = formatter.parse(source);
 		return new Timestamp(d.getTime());
+	}
+	
+	private String convertTs2String(Timestamp source, String pattern) throws ParseException {
+		DateFormat formatter = new SimpleDateFormat(pattern);
+		String s = formatter.format(new Date(source.getTime()));
+		return s;
 	}
 	
 	@RequestMapping(method = RequestMethod.GET, value = "/newGoal")
@@ -1472,5 +1483,240 @@ public class PlanningService {
 			}
 		}
 		return 1;
+	}
+	
+	@RequestMapping(method = RequestMethod.GET, value = "/newState")
+	public int newState(@RequestParam(required = true, name = "projectId") Integer projectId,
+			@RequestParam(required = true, name = "name") String name,
+			@RequestParam(required = false, name = "curState") String curState,
+			@RequestParam(required = false, name = "planState") String planState,
+			@RequestParam(required = false, name = "result") String result,
+			@RequestParam(required = true, name = "checkpointDate") String checkpointDate,
+			@RequestParam(required = true, name = "isInitial") Boolean isInitial,
+			@RequestParam(required = true, name = "isGoal") Boolean isGoal) {
+
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// make query to get detail by time and section
+				StringBuilder query = new StringBuilder(
+						"INSERT INTO State(Project_Id, Name, Is_initial, Is_goal, Content, Plan_state, Checkpoint_date, Result) ");
+				query.append("VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
+				
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (projectId != null && projectId > 0) {
+					stmt.setInt(1, projectId);
+				}
+				if (name != null && !name.isEmpty()) {
+					stmt.setString(2, name);
+				}
+				if (isInitial != null) {
+					stmt.setBoolean(3, isInitial);
+				}
+				if (isGoal != null) {
+					stmt.setBoolean(4, isGoal);
+				}
+				String pattern = "yyyy/MM/dd";
+				// get initial date
+				String initialDate = "";
+				StringBuilder qTmp = new StringBuilder("SELECT Checkpoint_date FROM State WHERE Project_id = ? AND Is_initial = 1");
+				PreparedStatement stmtTmp = dBConn.prepareStatement(qTmp.toString());
+				if (projectId != null && projectId > 0) {
+					stmtTmp.setInt(1, projectId);
+				}
+				ResultSet rs = stmtTmp.executeQuery();
+				while(rs.next()) {
+					Timestamp ts = rs.getTimestamp(1);
+					initialDate = convertTs2String(ts, pattern);
+				}
+				rs.close();
+				stmtTmp.close();
+				// calculate current state value
+				if (curState == null || curState.isEmpty()) {
+					curState = calculateCurrentState(projectId, checkpointDate, initialDate);
+				}
+				stmt.setString(5, curState);
+				// calculate plan state value
+				if (planState == null || planState.isEmpty()) {
+					planState = calculatePlanState(projectId, checkpointDate, initialDate);
+				}
+				stmt.setString(6, planState);
+				if (checkpointDate != null && !checkpointDate.isEmpty()) {
+					stmt.setTimestamp(7, convertString2Ts(checkpointDate, pattern));
+				}
+				stmt.setString(8, result);
+
+				// execute insert/update
+				stmt.executeUpdate();
+				stmt.close();
+
+			} catch (SQLException | ParseException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+				return 0;
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return 1;
+	}
+	
+	private String calculatePlanState(Integer projectId, String checkpointDate, String initialDate) {
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// make query to get plan detail
+				StringBuilder query = new StringBuilder(
+						"SELECT a.Item_value, a.Date_start, a.Date_end FROM Plan_Detail a JOIN Plan b ON a.Plan_id = b.Id WHERE 1=1 ");
+				query.append("AND b.Project_id = ? ");
+				
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (projectId != null && projectId > 0) {
+					stmt.setInt(1, projectId);
+				}
+
+				long planDetailValue = 0;
+				String pattern = "yyyy/MM/dd";
+				Timestamp tsCheckpointDate = convertString2Ts(checkpointDate, pattern);
+				// execute query
+				ResultSet rs = stmt.executeQuery();
+				while (rs.next()) {
+					String itemValue = rs.getString(1);
+					Timestamp dateStart = rs.getTimestamp(2);
+					Timestamp dateEnd = rs.getTimestamp(3);
+					
+					long v = parseLong(itemValue);
+					if (tsCheckpointDate.getTime() < dateStart.getTime()) {
+						planDetailValue += 0;
+					}
+					else if (tsCheckpointDate.getTime() > dateEnd.getTime()) {
+						planDetailValue += v;
+					}
+					else {
+						planDetailValue += (double)v * ((double)(tsCheckpointDate.getTime() - dateStart.getTime()) / (dateEnd.getTime() - dateStart.getTime()));
+					}
+				}
+				rs.close();
+				stmt.close();
+				
+				// Get total budget and total duration from project
+				query = new StringBuilder("SELECT Total_budget FROM Project WHERE 1=1 ");
+				query.append("AND Id = ? ");
+				stmt = dBConn.prepareStatement(query.toString());
+				if (projectId != null && projectId > 0) {
+					stmt.setInt(1, projectId);
+				}
+				long totalBudget = 1;
+				// execute query
+				rs = stmt.executeQuery();
+				while (rs.next()) {
+					totalBudget = rs.getLong(1);
+				}
+				rs.close();
+				stmt.close();
+				
+				// Set plan state value
+				double d = ((double) planDetailValue / totalBudget) * 100;
+				long budgetPercent = Math.round(d);
+				Calendar cal2 = Calendar.getInstance();
+				cal2.setTimeInMillis(convertString2Ts(checkpointDate, pattern).getTime());
+				Calendar cal1 = Calendar.getInstance();
+				cal1.setTimeInMillis(convertString2Ts(initialDate, pattern).getTime());
+				long totalDuration = cal2.get(Calendar.MONTH) - cal1.get(Calendar.MONTH) + 1;
+				
+				String curState = budgetPercent + "% budget. " + totalDuration + " months.";
+				return curState;
+
+			} catch (SQLException | ParseException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+				return "";
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return "";
+	}
+	
+	private String calculateCurrentState(Integer projectId, String checkpointDate, String initialDate) {
+		// connect to DB
+		Connection dBConn = getDBConnection();
+		if (dBConn != null) {
+			try {
+				// make query to get actual execution value
+				StringBuilder query = new StringBuilder(
+						"SELECT a.Item_value FROM Execution_Log a JOIN Plan b ON a.Plan_id = b.Id WHERE 1=1 ");
+				query.append("AND b.Project_id = ? AND a.Date_end <= ? ");
+				
+				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
+				if (projectId != null && projectId > 0) {
+					stmt.setInt(1, projectId);
+				}
+				if (checkpointDate != null && !checkpointDate.isEmpty()) {
+					stmt.setTimestamp(2, convertString2Ts(checkpointDate, "yyyy/MM/dd"));
+				}
+
+				long actualExecutionValue = 0;
+				// execute query
+				ResultSet rs = stmt.executeQuery();
+				while (rs.next()) {
+					String itemValue = rs.getString(1);
+					actualExecutionValue += parseLong(itemValue);
+				}
+				rs.close();
+				stmt.close();
+				
+				// Get total budget and total duration from project
+				query = new StringBuilder("SELECT Total_budget FROM Project WHERE 1=1 ");
+				query.append("AND Id = ? ");
+				stmt = dBConn.prepareStatement(query.toString());
+				if (projectId != null && projectId > 0) {
+					stmt.setInt(1, projectId);
+				}
+				long totalBudget = 1;
+				// execute query
+				rs = stmt.executeQuery();
+				while (rs.next()) {
+					totalBudget = rs.getLong(1);
+				}
+				rs.close();
+				stmt.close();
+				
+				// Update actual value for current state
+				double d = ((double) actualExecutionValue / totalBudget) * 100;
+				long budgetPercent = Math.round(d);
+				String pattern = "yyyy/MM/dd";
+				Calendar cal2 = Calendar.getInstance();
+				cal2.setTimeInMillis(convertString2Ts(checkpointDate, pattern).getTime());
+				Calendar cal1 = Calendar.getInstance();
+				cal1.setTimeInMillis(convertString2Ts(initialDate, pattern).getTime());
+				long totalDuration = cal2.get(Calendar.MONTH) - cal1.get(Calendar.MONTH) + 1;
+				
+				String curState = budgetPercent + "% budget. " + totalDuration + " months.";
+				return curState;
+
+			} catch (SQLException | ParseException e) {
+				e.printStackTrace();
+				System.err.println("Query failed!");
+				return "";
+			} finally {
+				try {
+					dBConn.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return "";
 	}
 }

@@ -1,6 +1,7 @@
 package com.bdi.planning;
 
 import java.io.Serializable;
+import java.sql.Timestamp;
 
 public class State implements Serializable{
 
@@ -14,6 +15,8 @@ public class State implements Serializable{
 	private String Result;
 	private int Is_initial;
 	private int Is_goal;
+	private String Plan_state;
+	private Timestamp Checkpoint_date;
 	private int totalResult;
 	
 	public Integer getId() {
@@ -60,6 +63,18 @@ public class State implements Serializable{
 	}
 	public void setResult(String result) {
 		Result = result;
+	}
+	public String getPlan_state() {
+		return Plan_state;
+	}
+	public void setPlan_state(String plan_state) {
+		Plan_state = plan_state;
+	}
+	public Timestamp getCheckpoint_date() {
+		return Checkpoint_date;
+	}
+	public void setCheckpoint_date(Timestamp checkpoint_date) {
+		Checkpoint_date = checkpoint_date;
 	}
 
 }
