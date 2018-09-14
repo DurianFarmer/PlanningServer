@@ -669,9 +669,9 @@ public class PlanningService {
 			try {
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"SELECT a.Item_id, a.Item_value, b.Name, b.Unit, a.User_executed, a.Date_start, a.Date_end, a.Date_log " +
+						"SELECT a.Item_id, a.Item_value, b.Name, b.Unit, a.Execution_purpose, a.Date_start, a.Date_end, a.Date_log, a.Execution_method " +
 						"FROM Execution_Log a JOIN Plan_Item b ON a.Item_id = b.Id WHERE 1=1 ");
-				query.append("AND a.Plan_id = ? ORDER BY a.Date_start, a.Date_log ");
+				query.append("AND a.Plan_id = ? ORDER BY a.Date_start DESC, a.Date_log DESC ");
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				stmt.setInt(1, planId);
 
@@ -682,21 +682,22 @@ public class PlanningService {
 					String item_value = rs.getString(2);
 					String item_name = rs.getString(3);
 					String item_unit = rs.getString(4);
-					int user_executed = rs.getInt(5);
+					String execution_purpose = rs.getString(5);
 					Timestamp date_start = rs.getTimestamp(6);
 					Timestamp date_end = rs.getTimestamp(7);
 					Timestamp date_log = rs.getTimestamp(8);
+					String execution_method = rs.getString(9);
 					// add to result
 					ExecutionLog p = new ExecutionLog();
 					p.setItemId(itemId);
 					p.setItem_name(item_name);
 					p.setItem_value(item_value);
 					p.setItem_unit(item_unit);
-					p.setUser_executed(user_executed);
+					p.setExecution_purpose(execution_purpose);
+					p.setExecution_method(execution_method);
 					p.setDate_start(date_start);
 					p.setDate_end(date_end);
 					p.setDate_log(date_log);
-					p.setUser_executed_name(userMap.get(user_executed));
 					result.add(p);
 				}
 				rs.close();
@@ -1201,7 +1202,9 @@ public class PlanningService {
 			@RequestParam(required = true, name = "itemId") Integer itemId,
 			@RequestParam(required = true, name = "itemValue") String itemValue,
 			@RequestParam(required = true, name = "startDate") String startDate,
-			@RequestParam(required = true, name = "endDate") String endDate) {
+			@RequestParam(required = true, name = "endDate") String endDate,
+			@RequestParam(required = false, name = "purpose") String purpose,
+			@RequestParam(required = false, name = "method") String method) {
 
 		// connect to DB
 		Connection dBConn = getDBConnection();
@@ -1209,8 +1212,8 @@ public class PlanningService {
 			try {
 				// make query to get detail by time and section
 				StringBuilder query = new StringBuilder(
-						"INSERT INTO Execution_Log(Plan_id, Item_id, Item_value, Date_start, Date_end, User_executed, Date_log) ");
-				query.append("VALUES(?, ?, ?, ?, ?, ?, ?)");
+						"INSERT INTO Execution_Log(Plan_id, Item_id, Item_value, Date_start, Date_end, Execution_purpose, Execution_method, Date_log) ");
+				query.append("VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
 				
 				PreparedStatement stmt = dBConn.prepareStatement(query.toString());
 				if (planId != null && planId > 0) {
@@ -1229,9 +1232,12 @@ public class PlanningService {
 				if (endDate != null && !endDate.isEmpty()) {
 					stmt.setTimestamp(5, convertString2Ts(endDate, pattern));
 				}
-				stmt.setInt(6, 1); // userId = 1
+				// execution purpose
+				stmt.setString(6, purpose);
+				// execution method
+				stmt.setString(7, method);
 				// current time log
-				stmt.setTimestamp(7, new Timestamp(new Date().getTime()));
+				stmt.setTimestamp(8, new Timestamp(new Date().getTime()));
 
 				// execute insert/update
 				stmt.executeUpdate();

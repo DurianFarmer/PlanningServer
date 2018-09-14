@@ -19,6 +19,8 @@ public class ExecutionLog implements Serializable {
 	private int totalResult;
 	private String item_name;
 	private String item_unit;
+	private String execution_purpose;
+	private String execution_method;
 	private String user_executed_name;
 	
 	public int getId() {
@@ -92,6 +94,18 @@ public class ExecutionLog implements Serializable {
 	}
 	public void setDate_log(Timestamp date_log) {
 		this.date_log = date_log;
+	}
+	public String getExecution_purpose() {
+		return execution_purpose;
+	}
+	public void setExecution_purpose(String execution_purpose) {
+		this.execution_purpose = execution_purpose;
+	}
+	public String getExecution_method() {
+		return execution_method;
+	}
+	public void setExecution_method(String execution_method) {
+		this.execution_method = execution_method;
 	}
 
 }
