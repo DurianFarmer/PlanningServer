@@ -14,9 +14,9 @@ public class DataSource {
 	private DataSource() throws IOException, SQLException, PropertyVetoException {
 		cpds = new ComboPooledDataSource();
 		cpds.setDriverClass("com.mysql.cj.jdbc.Driver"); // loads the jdbc driver
-		cpds.setJdbcUrl("jdbc:mysql://147.47.206.14:3306/planning?characterEncoding=utf8&serverTimezone=UTC");
-		cpds.setUser("root");
-		cpds.setPassword("root");
+		cpds.setJdbcUrl("jdbc:mysql://147.47.206.14:3306/planning?characterEncoding=utf8&serverTimezone=UTC&useSSL=false");
+		cpds.setUser("user2"); // root/Snu2019!
+		cpds.setPassword("Snu2019!");
 
 		// the settings below are optional -- c3p0 can work with defaults
 		cpds.setInitialPoolSize(10);
